@@ -1,0 +1,97 @@
+name: Update feed
+
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: feeder-update
+  cancel-in-progress: false
+
+env:
+  FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
+  SOURCE_URL: ${{ vars.SOURCE_URL }}
+  FEED_TITLE: ${{ vars.FEED_TITLE }}
+  FEED_DESCRIPTION: ${{ vars.FEED_DESCRIPTION }}
+  FEED_SITE_URL: ${{ vars.FEED_SITE_URL }}
+  PUBLIC_BASE_URL: ${{ vars.PUBLIC_BASE_URL }}
+  FEED_LANGUAGE: ${{ vars.FEED_LANGUAGE }}
+  FEED_AUTHOR: ${{ vars.FEED_AUTHOR }}
+  FEED_COPYRIGHT: ${{ vars.FEED_COPYRIGHT }}
+  ATOM_FILENAME: ${{ vars.ATOM_FILENAME }}
+  RSS_FILENAME: ${{ vars.RSS_FILENAME }}
+  MAX_FEED_ITEMS: ${{ vars.MAX_FEED_ITEMS }}
+  INITIAL_ITEM_LIMIT: ${{ vars.INITIAL_ITEM_LIMIT }}
+  EXTRACTION_HINT: ${{ vars.EXTRACTION_HINT }}
+  FIRECRAWL_TIMEOUT_MS: ${{ vars.FIRECRAWL_TIMEOUT_MS }}
+  FIRECRAWL_MAX_AGE_MS: ${{ vars.FIRECRAWL_MAX_AGE_MS }}
+  FIRECRAWL_ONLY_MAIN_CONTENT: ${{ vars.FIRECRAWL_ONLY_MAIN_CONTENT }}
+  FIRECRAWL_PROXY: ${{ vars.FIRECRAWL_PROXY }}
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      status: ${{ steps.result.outputs.status }}
+    steps:
+      - name: Check out default branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Update feed
+        id: update
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run update 2>&1 | tee update.log
+      - name: Read update result
+        id: result
+        shell: bash
+        run: |
+          result="$(tail -n 1 update.log)"
+          status="$(node --input-type=module -e 'const result = JSON.parse(process.argv[1]); console.log(result.status);' "$result")"
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+      - name: Commit updated state and feeds
+        if: steps.result.outputs.status == 'updated'
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/state.json public/
+          if git diff --cached --quiet; then
+            echo "No file changes to commit"
+          else
+            git commit -m "chore: update feed"
+            git push
+          fi
+      - name: Upload GitHub Pages artifact
+        if: steps.result.outputs.status == 'updated'
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: public
+
+  deploy:
+    if: needs.update.outputs.status == 'updated'
+    needs: update
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

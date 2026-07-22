@@ -14,20 +14,8 @@ env:
   SOURCE_URL: ${{ vars.SOURCE_URL }}
   FEED_TITLE: ${{ vars.FEED_TITLE }}
   FEED_DESCRIPTION: ${{ vars.FEED_DESCRIPTION }}
-  FEED_SITE_URL: ${{ vars.FEED_SITE_URL }}
   PUBLIC_BASE_URL: ${{ vars.PUBLIC_BASE_URL }}
-  FEED_LANGUAGE: ${{ vars.FEED_LANGUAGE }}
-  FEED_AUTHOR: ${{ vars.FEED_AUTHOR }}
-  FEED_COPYRIGHT: ${{ vars.FEED_COPYRIGHT }}
-  ATOM_FILENAME: ${{ vars.ATOM_FILENAME }}
-  RSS_FILENAME: ${{ vars.RSS_FILENAME }}
-  MAX_FEED_ITEMS: ${{ vars.MAX_FEED_ITEMS }}
-  INITIAL_ITEM_LIMIT: ${{ vars.INITIAL_ITEM_LIMIT }}
-  EXTRACTION_HINT: ${{ vars.EXTRACTION_HINT }}
-  FIRECRAWL_TIMEOUT_MS: ${{ vars.FIRECRAWL_TIMEOUT_MS }}
-  FIRECRAWL_MAX_AGE_MS: ${{ vars.FIRECRAWL_MAX_AGE_MS }}
-  FIRECRAWL_ONLY_MAIN_CONTENT: ${{ vars.FIRECRAWL_ONLY_MAIN_CONTENT }}
-  FIRECRAWL_PROXY: ${{ vars.FIRECRAWL_PROXY }}
+  FEED_SITE_URL: ${{ vars.FEED_SITE_URL }}
 
 jobs:
   update:
@@ -48,6 +36,29 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
+      - name: Propagate optional env vars
+        # Repository variables render to empty strings when unset, which
+        # the config schema rejects as invalid for the keys below. Only
+        # forward vars that have a non-empty value so process.env never
+        # sees a key the schema treats as truly optional.
+        run: |
+          maybe_set() {
+            if [ -n "$1" ]; then
+              printf '%s=%s\n' "$2" "$1" >> "$GITHUB_ENV"
+            fi
+          }
+          maybe_set "${{ vars.ATOM_FILENAME }}" ATOM_FILENAME
+          maybe_set "${{ vars.RSS_FILENAME }}" RSS_FILENAME
+          maybe_set "${{ vars.MAX_FEED_ITEMS }}" MAX_FEED_ITEMS
+          maybe_set "${{ vars.INITIAL_ITEM_LIMIT }}" INITIAL_ITEM_LIMIT
+          maybe_set "${{ vars.EXTRACTION_HINT }}" EXTRACTION_HINT
+          maybe_set "${{ vars.FIRECRAWL_TIMEOUT_MS }}" FIRECRAWL_TIMEOUT_MS
+          maybe_set "${{ vars.FIRECRAWL_MAX_AGE_MS }}" FIRECRAWL_MAX_AGE_MS
+          maybe_set "${{ vars.FIRECRAWL_ONLY_MAIN_CONTENT }}" FIRECRAWL_ONLY_MAIN_CONTENT
+          maybe_set "${{ vars.FIRECRAWL_PROXY }}" FIRECRAWL_PROXY
+          maybe_set "${{ vars.FEED_LANGUAGE }}" FEED_LANGUAGE
+          maybe_set "${{ vars.FEED_AUTHOR }}" FEED_AUTHOR
+          maybe_set "${{ vars.FEED_COPYRIGHT }}" FEED_COPYRIGHT
       - name: Update feed
         id: update
         shell: bash
